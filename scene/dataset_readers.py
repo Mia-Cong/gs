@@ -22,6 +22,8 @@ from pathlib import Path
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
+import glob 
+import cv2
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -41,6 +43,53 @@ class SceneInfo(NamedTuple):
     test_cameras: list
     nerf_normalization: dict
     ply_path: str
+
+
+def load_images(image_list):
+    images = []
+    for image_name in image_list:
+        image = cv2.imread(image_name, cv2.IMREAD_UNCHANGED) #(540, 960, 3)
+        image = image.astype(np.float32)
+        images.append(image)
+    return np.stack(images)
+
+def load_depths_npz(image_list):
+    depths = []
+    for image_name in image_list:
+        depth = np.load(image_name)['pred']
+        if depth.shape[0] == 1:
+            depth = depth[0]    
+        depths.append(depth)
+    depths = np.stack(depths)
+   
+    return depths
+
+def depth_map_to_point_cloud(depth_map, color_image,intrinsics):
+    # Create a grid of coordinates corresponding to the pixel indices
+    height, width = depth_map.shape
+    u, v = np.meshgrid(np.arange(width), np.arange(height))
+
+    # Flatten the depth map and the u, v coordinates
+    depth = depth_map.flatten()
+    u = u.flatten()
+    v = v.flatten()
+
+    # Convert pixel coordinates to camera coordinates
+    fx, fy = intrinsics[0], intrinsics[0]
+    cx, cy = intrinsics[1], intrinsics[2]
+    x = (u - cx) * depth / fx
+    y = (v - cy) * depth / fy
+    z = depth
+
+    # Stack x, y, z to get the 3D points in camera coordinates
+    # points_3d = np.vstack((x, y, z)).transpose()
+    points_3d = np.array([x, y, z]).transpose()
+    color_points = color_image[v, u]
+
+    # Filter out points with no depth information
+    # points_3d = points_3d[depth > 0]
+
+    return points_3d,color_points
 
 def getNerfppNorm(cam_info):
     def get_center_and_diag(cam_centers):
@@ -154,16 +203,25 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
 
+    depth_maps=sorted(glob.glob(os.path.join(path,'dpt','*.npz')))
+    depth_maps=load_depths_npz(depth_maps)
+    
+
+    color_images=sorted(glob.glob(os.path.join(path,'images','*.jpg')))
+    color_images=load_images(color_images)    
+
+    xyz,color_points=depth_map_to_point_cloud(depth_maps[0],color_images[0],cam_intrinsics[1].params)
+        
     ply_path = os.path.join(path, "sparse/0/points3D.ply")
-    bin_path = os.path.join(path, "sparse/0/points3D.bin")
-    txt_path = os.path.join(path, "sparse/0/points3D.txt")
+    # bin_path = os.path.join(path, "sparse/0/points3D.bin")
+    # txt_path = os.path.join(path, "sparse/0/points3D.txt")
     if not os.path.exists(ply_path):
-        print("Converting point3d.bin to .ply, will happen only the first time you open the scene.")
-        try:
-            xyz, rgb, _ = read_points3D_binary(bin_path)
-        except:
-            xyz, rgb, _ = read_points3D_text(txt_path)
-        storePly(ply_path, xyz, rgb)
+        # print("Converting point3d.bin to .ply, will happen only the first time you open the scene.")
+        # try:
+        #     xyz, rgb, _ = read_points3D_binary(bin_path)
+        # except:
+        #     xyz, rgb, _ = read_points3D_text(txt_path)
+        storePly(ply_path, xyz, (color_points))
     try:
         pcd = fetchPly(ply_path)
     except:
