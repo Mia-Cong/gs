@@ -203,25 +203,26 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
 
-    depth_maps=sorted(glob.glob(os.path.join(path,'dpt','*.npz')))
-    depth_maps=load_depths_npz(depth_maps)
-    
-
-    color_images=sorted(glob.glob(os.path.join(path,'images','*.jpg')))
-    color_images=load_images(color_images)    
-
-    xyz,color_points=depth_map_to_point_cloud(depth_maps[0],color_images[0],cam_intrinsics[1].params)
+    # depth_maps=sorted(glob.glob(os.path.join(path,'dpt','*.npz')))
+    # depth_maps=load_depths_npz(depth_maps)
+    # 
+    #
+    # color_images=sorted(glob.glob(os.path.join(path,'images','*.jpg')))
+    # color_images=load_images(color_images)    
+    #
+    # xyz,color_points=depth_map_to_point_cloud(depth_maps[0],color_images[0],cam_intrinsics[1].params)
         
     ply_path = os.path.join(path, "sparse/0/points3D.ply")
     # bin_path = os.path.join(path, "sparse/0/points3D.bin")
     # txt_path = os.path.join(path, "sparse/0/points3D.txt")
     if not os.path.exists(ply_path):
-        # print("Converting point3d.bin to .ply, will happen only the first time you open the scene.")
-        # try:
-        #     xyz, rgb, _ = read_points3D_binary(bin_path)
-        # except:
-        #     xyz, rgb, _ = read_points3D_text(txt_path)
-        storePly(ply_path, xyz, (color_points))
+        print("Converting point3d.bin to .ply, will happen only the first time you open the scene.")
+        try:
+            xyz, rgb, _ = read_points3D_binary(bin_path)
+        except:
+            xyz, rgb, _ = read_points3D_text(txt_path)
+        # storePly(ply_path, xyz, (color_points))
+        storePly(ply_path, xyz, rgb)
     try:
         pcd = fetchPly(ply_path)
     except:

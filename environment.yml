@@ -1,4 +1,4 @@
-name: gaussian_splatting
+name: wenyan_gs
 channels:
   - pytorch
   - conda-forge
@@ -11,7 +11,10 @@ dependencies:
   - pytorch=1.12.1
   - torchaudio=0.12.1
   - torchvision=0.13.1
+  - opencv
+  - matplotlib
   - tqdm
   - pip:
-    - submodules/diff-gaussian-rasterization
-    - submodules/simple-knn
+      - submodules/diff-gaussian-rasterization
+      - submodules/simple-knn
+      - mathutils==2.81.2

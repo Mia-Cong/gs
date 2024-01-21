@@ -15,7 +15,7 @@ from utils.pose_utils import (
     get_tensor_from_camera,
     quadmultiply,
 )
-from utils.loss_utils import l1_loss, l2_loss, ssim, quat_loss
+from utils.loss_utils import l1_loss
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -79,7 +79,7 @@ def optimize_cam(
     # Loss
     gt_image = view.original_image.cuda()
     loss = l1_loss(image, gt_image)
-    loss.backward()
+    loss.backward(retain_graph=True)
 
     # Optimize
     with torch.no_grad():
@@ -93,8 +93,8 @@ def optimize_cam(
     return loss, image
 
 
-def track(dataset, opt, pp, checkpoint_iter: int, const_velocity, clip_grad):
-    gaussians = GaussianModel(dataset.sh_degree, freeze_map=True)
+def track(dataset, opt, pp, checkpoint_iter: int, const_velocity):
+    gaussians = GaussianModel(dataset.sh_degree)
 
     scene = Scene(dataset, gaussians, load_iteration=checkpoint_iter, shuffle=False)
     prune_gaussians(gaussians, 0.5)
@@ -135,16 +135,15 @@ def track(dataset, opt, pp, checkpoint_iter: int, const_velocity, clip_grad):
         # if idx == 300:
         #     break
 
-        # # If using the constant velocity model
-        # if const_velocity and idx - 2 >= 0:
-        #     pre_w2c = get_camera_from_tensor(camera_tensor)
-        #     delta = (
-        #         pre_w2c @ get_camera_from_tensor(camera_tensor_list[idx - 2]).inverse()
-        #     )
-        #     camera_tensor = get_tensor_from_camera(delta @ pre_w2c)
-        #     # camera_tensor.requires_grad_()
-        #     camera_tensor_T = camera_tensor[-3:].requires_grad_()
-        #     camera_tensor_q = camera_tensor[:4].requires_grad_()
+        # If using the constant velocity model
+        if const_velocity and idx - 2 >= 0:
+            pre_w2c = get_camera_from_tensor(camera_tensor)
+            delta = (
+                pre_w2c @ get_camera_from_tensor(camera_tensor_list[idx - 2]).inverse()
+            )
+            camera_tensor = get_tensor_from_camera(delta @ pre_w2c)
+            camera_tensor_T = camera_tensor[-3:].requires_grad_()
+            camera_tensor_q = camera_tensor[:4].requires_grad_()
 
         pose_optimizer = torch.optim.Adam(
             [
@@ -170,6 +169,10 @@ def track(dataset, opt, pp, checkpoint_iter: int, const_velocity, clip_grad):
                 camera_tensor_q,
                 camera_tensor_T,
             )
+
+            with torch.no_grad():
+                if cam_iter == 0:
+                    initial_loss = loss
 
         with torch.no_grad():
             # Save images
@@ -225,7 +228,6 @@ if __name__ == "__main__":
     parser.add_argument("--detect_anomaly", action="store_true", default=False)
     parser.add_argument("--const_velocity", action="store_true", default=False)
     parser.add_argument("--pose_noise", type=float, default=0.0)
-    parser.add_argument("--clip_grad", action="store_true", default=False)
 
     # args = parser.parse_args(sys.argv[1:])
     args = get_combined_args(parser)
@@ -241,7 +243,6 @@ if __name__ == "__main__":
         pipeline.extract(args),
         args.iteration,
         args.const_velocity,
-        args.clip_grad,
     )
 
     print("\nTracking complete.")
