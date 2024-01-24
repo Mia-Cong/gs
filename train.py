@@ -11,6 +11,7 @@
 
 import os
 import torch
+import torchvision
 from random import randint
 from utils.loss_utils import l1_loss, ssim
 from gaussian_renderer import render, network_gui
@@ -74,9 +75,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         # Pick a random Camera
         if not viewpoint_stack:
-            viewpoint_stack = scene.getTrainCameras().copy()
-        # viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
-        viewpoint_cam = viewpoint_stack[0]
+            # viewpoint_stack = scene.getTrainCameras().copy()
+            viewpoint_stack = [scene.getTrainCameras()[0], scene.getTrainCameras()[5]]
+        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+        # viewpoint_cam = viewpoint_stack[0]
         # print(viewpoint_cam.colmap_id)
 
         # Render
@@ -97,6 +99,17 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         iter_end.record()
 
         with torch.no_grad():
+             
+            if iteration % 250 == 0:
+                render_path = os.path.join(dataset.model_path, "renders")
+                gts_path = os.path.join(dataset.model_path, "gt")
+
+                os.makedirs(render_path, exist_ok=True)
+                os.makedirs(gts_path, exist_ok=True)
+
+                torchvision.utils.save_image(image, os.path.join(render_path, '{0:05d}'.format(iteration) + ".png"))
+                torchvision.utils.save_image(gt_image, os.path.join(gts_path, '{0:05d}'.format(iteration) + ".png"))
+
             # Progress bar
             ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
             if iteration % 10 == 0:

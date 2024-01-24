@@ -37,8 +37,8 @@ def multiply_quaternions(q1, q2):
 
 
 if __name__ == "__main__":
-    # path = "output/room0/"
-    path = "../gaussian-splatting-w-pose/output/room0_0sh/"
+    path = "output/horse/"
+    # path = "../gaussian-splatting-w-pose/output/room0_0sh/"
     traj_track = np.load(path + "tracking_traj.npy")
     traj_gt = np.load(path + "tracking_traj_gt.npy")
 

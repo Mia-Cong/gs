@@ -213,8 +213,8 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
     # xyz,color_points=depth_map_to_point_cloud(depth_maps[0],color_images[0],cam_intrinsics[1].params)
         
     ply_path = os.path.join(path, "sparse/0/points3D.ply")
-    # bin_path = os.path.join(path, "sparse/0/points3D.bin")
-    # txt_path = os.path.join(path, "sparse/0/points3D.txt")
+    bin_path = os.path.join(path, "sparse/0/points3D.bin")
+    txt_path = os.path.join(path, "sparse/0/points3D.txt")
     if not os.path.exists(ply_path):
         print("Converting point3d.bin to .ply, will happen only the first time you open the scene.")
         try:

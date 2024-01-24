@@ -22,6 +22,19 @@ import matplotlib.pyplot as plt
 import torch.nn.functional as F
 
 
+def compute_relative_world_to_camera(R2, t2, R1, t1):
+    zero_row = torch.tensor([[0, 0, 0, 1]], dtype=R1.dtype, device=R1.device)
+    E1_inv = torch.cat(
+        [torch.transpose(R1, 0, 1), -torch.transpose(R1, 0, 1) @ t1.reshape(-1, 1)],
+        dim=1,
+    )
+    E1_inv = torch.cat([E1_inv, zero_row], dim=0)
+    E2 = torch.cat([R2, -R2 @ t2.reshape(-1, 1)], dim=1)
+    E2 = torch.cat([E2, zero_row], dim=0)
+    E_rel = E2 @ E1_inv
+    return E_rel
+
+
 def prune_gaussians(gaussians, opac_thres):
     # Prune Gaussians that have opacity below opac_thres
     mask = gaussians.get_opacity > opac_thres
@@ -68,12 +81,7 @@ def optimize_cam(
     gaussians._rotation = gaussians_rot_trans
 
     # Render
-    result = render(
-        view,
-        gaussians,
-        pipeline,
-        background,
-    )
+    result = render(view, gaussians, pipeline, background, fix_camera=True)
     image = result["render"]
 
     # Loss
@@ -97,7 +105,7 @@ def track(dataset, opt, pp, checkpoint_iter: int, const_velocity):
     gaussians = GaussianModel(dataset.sh_degree)
 
     scene = Scene(dataset, gaussians, load_iteration=checkpoint_iter, shuffle=False)
-    prune_gaussians(gaussians, 0.5)
+    # prune_gaussians(gaussians, 0.5)
 
     gt_viewpoints_list = scene.getTrainCameras().copy()
 
@@ -132,22 +140,24 @@ def track(dataset, opt, pp, checkpoint_iter: int, const_velocity):
     # Pick the next camera
     for idx, view in enumerate(progress_bar):
         # Stop prematurely at specified idx
-        # if idx == 300:
-        #     break
+        if idx == 6:
+            break
+        if idx not in [0, 5]:
+            continue
 
-        # If using the constant velocity model
-        if const_velocity and idx - 2 >= 0:
-            pre_w2c = get_camera_from_tensor(camera_tensor)
-            delta = (
-                pre_w2c @ get_camera_from_tensor(camera_tensor_list[idx - 2]).inverse()
-            )
-            camera_tensor = get_tensor_from_camera(delta @ pre_w2c)
-            camera_tensor_T = camera_tensor[-3:].requires_grad_()
-            camera_tensor_q = camera_tensor[:4].requires_grad_()
+        # # If using the constant velocity model
+        # if const_velocity and idx - 2 >= 0:
+        #     pre_w2c = get_camera_from_tensor(camera_tensor)
+        #     delta = (
+        #         pre_w2c @ get_camera_from_tensor(camera_tensor_list[idx - 2]).inverse()
+        #     )
+        #     camera_tensor = get_tensor_from_camera(delta @ pre_w2c)
+        #     camera_tensor_T = camera_tensor[-3:].requires_grad_()
+        #     camera_tensor_q = camera_tensor[:4].requires_grad_()
 
         pose_optimizer = torch.optim.Adam(
             [
-                {"params": [camera_tensor_T], "lr": 0.01},
+                {"params": [camera_tensor_T], "lr": 0.001},
                 {"params": [camera_tensor_q], "lr": 0.001},
             ]
         )
@@ -158,7 +168,7 @@ def track(dataset, opt, pp, checkpoint_iter: int, const_velocity):
             )
 
         # For some iterations
-        for cam_iter in range(100):
+        for cam_iter in range(500):
             loss, rendering = optimize_cam(
                 opt,
                 view,
@@ -202,6 +212,29 @@ def track(dataset, opt, pp, checkpoint_iter: int, const_velocity):
     pos_np = pos_np[non_zero_rows_mask]
     pos_np_init = pos_np_init[non_zero_rows_mask]
     pos_np_gt = pos_np_gt[non_zero_rows_mask]
+
+    T0 = get_camera_from_tensor(torch.tensor(pos_np[0, :]).cuda())
+    T5 = get_camera_from_tensor(torch.tensor(pos_np[1, :]).cuda())
+    R0 = T0[:3, :3]
+    t0 = T0[:3, 3]
+    R5 = T5[:3, :3]
+    t5 = T5[:3, 3]
+    est_rel = compute_relative_world_to_camera(R5, t5, R0, t0)
+    print(est_rel)
+
+    T0 = get_camera_from_tensor(torch.tensor(pos_np_gt[0, :]).cuda())
+    T5 = get_camera_from_tensor(torch.tensor(pos_np_gt[1, :]).cuda())
+    R0 = T0[:3, :3]
+    t0 = T0[:3, 3]
+    R5 = T5[:3, :3]
+    t5 = T5[:3, 3]
+    gt_rel = compute_relative_world_to_camera(R5, t5, R0, t0)
+    print(gt_rel)
+
+    diff = compute_relative_world_to_camera(
+        est_rel[:3, :3], est_rel[:3, 3], gt_rel[:3, :3], gt_rel[:3, 3]
+    )
+    print(diff)
 
     np.save(scene.model_path + "/tracking_traj", pos_np, allow_pickle=True)
     np.save(scene.model_path + "/tracking_traj_init", pos_np_init, allow_pickle=True)

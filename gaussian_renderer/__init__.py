@@ -15,7 +15,7 @@ from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianR
 from scene.gaussian_model import GaussianModel
 from utils.sh_utils import eval_sh
 
-def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None):
+def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None, fix_camera = False):
     """
     Render the scene. 
     
@@ -32,10 +32,15 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     # Set up rasterization configuration
     tanfovx = math.tan(viewpoint_camera.FoVx * 0.5)
     tanfovy = math.tan(viewpoint_camera.FoVy * 0.5)
-
-    w2c = torch.eye(4, device="cuda")
-    projmatrix = (w2c.unsqueeze(0).bmm(viewpoint_camera.projection_matrix.unsqueeze(0))).squeeze(0)
-    camera_pos = w2c.inverse()[3, :3]
+    
+    if fix_camera:
+        w2c = torch.eye(4, device="cuda")
+        projmatrix = (w2c.unsqueeze(0).bmm(viewpoint_camera.projection_matrix.unsqueeze(0))).squeeze(0)
+        camera_pos = w2c.inverse()[3, :3]
+    else:
+        w2c = viewpoint_camera.world_view_transform
+        projmatrix = viewpoint_camera.full_proj_transform
+        camera_pos = viewpoint_camera.camera_center
     raster_settings = GaussianRasterizationSettings(
         image_height=int(viewpoint_camera.image_height),
         image_width=int(viewpoint_camera.image_width),
@@ -43,12 +48,9 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         tanfovy=tanfovy,
         bg=bg_color,
         scale_modifier=scaling_modifier,
-        # viewmatrix=viewpoint_camera.world_view_transform,
         viewmatrix=w2c,
-        # projmatrix=viewpoint_camera.full_proj_transform,
         projmatrix=projmatrix,
         sh_degree=pc.active_sh_degree,
-        # campos=viewpoint_camera.camera_center,
         campos=camera_pos,
         prefiltered=False,
         debug=pipe.debug
