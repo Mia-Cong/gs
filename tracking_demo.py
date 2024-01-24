@@ -137,27 +137,30 @@ def track(dataset, opt, pp, checkpoint_iter: int, const_velocity):
     render_path = os.path.join(dataset.model_path, "tracking_renders")
     makedirs(render_path, exist_ok=True)
 
+    # Specify which indices to track
+    indices = list(range(0, 50, 5))
+
     # Pick the next camera
     for idx, view in enumerate(progress_bar):
         # Stop prematurely at specified idx
-        if idx == 6:
+        if idx > 50:
             break
-        if idx not in [0, 5]:
+        if idx not in indices:
             continue
 
-        # # If using the constant velocity model
-        # if const_velocity and idx - 2 >= 0:
-        #     pre_w2c = get_camera_from_tensor(camera_tensor)
-        #     delta = (
-        #         pre_w2c @ get_camera_from_tensor(camera_tensor_list[idx - 2]).inverse()
-        #     )
-        #     camera_tensor = get_tensor_from_camera(delta @ pre_w2c)
-        #     camera_tensor_T = camera_tensor[-3:].requires_grad_()
-        #     camera_tensor_q = camera_tensor[:4].requires_grad_()
+        # If using the constant velocity model
+        if const_velocity and idx - 2 >= 0:
+            pre_w2c = get_camera_from_tensor(camera_tensor)
+            delta = (
+                pre_w2c @ get_camera_from_tensor(camera_tensor_list[idx - 2]).inverse()
+            )
+            camera_tensor = get_tensor_from_camera(delta @ pre_w2c)
+            camera_tensor_T = camera_tensor[-3:].requires_grad_()
+            camera_tensor_q = camera_tensor[:4].requires_grad_()
 
         pose_optimizer = torch.optim.Adam(
             [
-                {"params": [camera_tensor_T], "lr": 0.001},
+                {"params": [camera_tensor_T], "lr": 0.01},
                 {"params": [camera_tensor_q], "lr": 0.001},
             ]
         )
@@ -168,7 +171,7 @@ def track(dataset, opt, pp, checkpoint_iter: int, const_velocity):
             )
 
         # For some iterations
-        for cam_iter in range(500):
+        for cam_iter in range(100):
             loss, rendering = optimize_cam(
                 opt,
                 view,
@@ -213,28 +216,28 @@ def track(dataset, opt, pp, checkpoint_iter: int, const_velocity):
     pos_np_init = pos_np_init[non_zero_rows_mask]
     pos_np_gt = pos_np_gt[non_zero_rows_mask]
 
-    T0 = get_camera_from_tensor(torch.tensor(pos_np[0, :]).cuda())
-    T5 = get_camera_from_tensor(torch.tensor(pos_np[1, :]).cuda())
-    R0 = T0[:3, :3]
-    t0 = T0[:3, 3]
-    R5 = T5[:3, :3]
-    t5 = T5[:3, 3]
-    est_rel = compute_relative_world_to_camera(R5, t5, R0, t0)
-    print(est_rel)
-
-    T0 = get_camera_from_tensor(torch.tensor(pos_np_gt[0, :]).cuda())
-    T5 = get_camera_from_tensor(torch.tensor(pos_np_gt[1, :]).cuda())
-    R0 = T0[:3, :3]
-    t0 = T0[:3, 3]
-    R5 = T5[:3, :3]
-    t5 = T5[:3, 3]
-    gt_rel = compute_relative_world_to_camera(R5, t5, R0, t0)
-    print(gt_rel)
-
-    diff = compute_relative_world_to_camera(
-        est_rel[:3, :3], est_rel[:3, 3], gt_rel[:3, :3], gt_rel[:3, 3]
-    )
-    print(diff)
+    # T0 = get_camera_from_tensor(torch.tensor(pos_np[0, :]).cuda())
+    # T5 = get_camera_from_tensor(torch.tensor(pos_np[1, :]).cuda())
+    # R0 = T0[:3, :3]
+    # t0 = T0[:3, 3]
+    # R5 = T5[:3, :3]
+    # t5 = T5[:3, 3]
+    # est_rel = compute_relative_world_to_camera(R5, t5, R0, t0)
+    # print(est_rel)
+    #
+    # T0 = get_camera_from_tensor(torch.tensor(pos_np_gt[0, :]).cuda())
+    # T5 = get_camera_from_tensor(torch.tensor(pos_np_gt[1, :]).cuda())
+    # R0 = T0[:3, :3]
+    # t0 = T0[:3, 3]
+    # R5 = T5[:3, :3]
+    # t5 = T5[:3, 3]
+    # gt_rel = compute_relative_world_to_camera(R5, t5, R0, t0)
+    # print(gt_rel)
+    #
+    # diff = compute_relative_world_to_camera(
+    #     est_rel[:3, :3], est_rel[:3, 3], gt_rel[:3, :3], gt_rel[:3, 3]
+    # )
+    # print(diff)
 
     np.save(scene.model_path + "/tracking_traj", pos_np, allow_pickle=True)
     np.save(scene.model_path + "/tracking_traj_init", pos_np_init, allow_pickle=True)
